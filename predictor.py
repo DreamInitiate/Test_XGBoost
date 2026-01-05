@@ -101,55 +101,20 @@ if st.button("Predict"):
 
 # SHAP 解释
 st.subheader("SHAP Force Plot Explanation")
+# 创建 SHAP 解释器，基于树模型
+explainer_shap = shap.TreeExplainer(model)
+# 计算 SHAP 值，用于解释模型的预测
+shap_values = explainer_shap.shap_values(pd.DataFrame([feature_values], columns=feature_names))
 
-try:
-    # 创建 SHAP 解释器，基于树模型
-    explainer_shap = shap.TreeExplainer(model)
-    
-    # 计算 SHAP 值
-    shap_values = explainer_shap.shap_values(pd.DataFrame([feature_values], columns=feature_names))
-    
-    # 检查 shap_values 的维度
-    shap_values_array = np.array(shap_values)
-    
-    # 对于二分类 XGBoost，通常有两种情况：
-    # 1. 直接返回 (n_samples, n_features) 形状的数组
-    # 2. 返回包含两个数组的列表 [negative_class_shap, positive_class_shap]
-    
-    if isinstance(shap_values, list) and len(shap_values) == 2:
-        # 如果是列表形式（两个类别）
-        if predicted_class == 1:
-            shap_vals = shap_values[1]  # 正类
-            expected_val = explainer_shap.expected_value[1] if hasattr(explainer_shap.expected_value, '__len__') else explainer_shap.expected_value
-        else:
-            shap_vals = shap_values[0]  # 负类
-            expected_val = explainer_shap.expected_value[0] if hasattr(explainer_shap.expected_value, '__len__') else explainer_shap.expected_value
-    else:
-        # 如果是数组形式
-        shap_vals = shap_values
-        expected_val = explainer_shap.expected_value
-        # 如果 expected_value 是数组，取对应的值
-        if hasattr(expected_val, '__len__') and len(expected_val) > 1:
-            expected_val = expected_val[1] if predicted_class == 1 else expected_val[0]
-    
-    # 确保 shap_vals 是二维的
-    if len(shap_vals.shape) == 1:
-        shap_vals = shap_vals.reshape(1, -1)
-    elif len(shap_vals.shape) == 3:
-        # 如果是三维数组，根据预测类别选择
-        shap_vals = shap_vals[0, :, predicted_class] if predicted_class == 1 else shap_vals[0, :, 0]
-        shap_vals = shap_vals.reshape(1, -1)
-    
-    # 创建力力图
-    fig, ax = plt.subplots()
-    shap.force_plot(
-        expected_val,
-        shap_vals,
-        pd.DataFrame([feature_values], columns=feature_names),
-        matplotlib=True,
-        show=False,
-        figsize=(12, 4)
-    )
+# 根据预测类别显示 SHAP 强制图
+# expected_value是数组
+if predicted_class == 1:
+    shap.force_plot(explainer_shap.expected_value[1], shap_values[0], pd.DataFrame([feature_values], columns=feature_names), matplotlib=True)
+else:
+    shap.force_plot(explainer_shap.expected_value[0], shap_values[0], pd.DataFrame([feature_values], columns=feature_names), matplotlib=True)
+
+plt.savefig("shap_force_plot.png", bbox_inches='tight', dpi=1200)
+st.image("shap_force_plot.png", caption='SHAP Force Plot Explanation')
     
     # LIME Explanation
     st.subheader("LIME Explanation")
@@ -169,6 +134,7 @@ try:
     # Display the LIME explanation without the feature value table
     lime_html = lime_exp.as_html(show_table=False)  # Disable feature value table
     st.components.v1.html(lime_html, height=800, scrolling=True)
+
 
 
 
