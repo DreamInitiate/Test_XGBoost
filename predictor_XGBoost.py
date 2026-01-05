@@ -99,27 +99,46 @@ if st.button("Predict"):
     # 显示建议
     st.write(advice)
 
-    # SHAP 解释
-    st.subheader("SHAP Force Plot Explanation")
-    # 创建 SHAP 解释器，基于树模型（如随机森林）
-    explainer_shap = shap.TreeExplainer(model)
-    # 计算 SHAP 值，用于解释模型的预测
-    shap_values = explainer_shap.shap_values(X_test)
-    
-    # 根据预测类别显示 SHAP 强制图
-    # 期望值（基线值）
-    # 解释类别 1（患病）的 SHAP 值
-    # 特征值数据
-    # 使用 Matplotlib 绘图
-    if predicted_class == 1:
-        shap.force_plot(explainer_shap.expected_value[1], shap_values[:,:,1], pd.DataFrame([feature_values], columns=feature_names), matplotlib=True)
-    # 期望值（基线值）
-    # 解释类别 0（未患病）的 SHAP 值
-    # 特征值数据
-    # 使用 Matplotlib 绘图
-    else:
-        shap.force_plot(explainer_shap.expected_value[0], shap_values[:,:,0], pd.DataFrame([feature_values], columns=feature_names), matplotlib=True)
+# SHAP 解释（简洁通用版）
+st.subheader("SHAP Force Plot Explanation")
 
+# 创建 SHAP 解释器
+explainer_shap = shap.TreeExplainer(model)
+
+# 将特征值转换为DataFrame格式
+sample_data = pd.DataFrame([feature_values], columns=feature_names)
+
+# 获取预测概率
+pred_proba = model.predict_proba(sample_data)[0]
+predicted_class = int(pred_proba[1] > 0.5)
+
+# 计算SHAP值
+shap_values_sample = explainer_shap.shap_values(sample_data)
+
+# 处理不同的SHAP值格式
+if isinstance(shap_values_sample, list):
+    # 列表格式 [负类SHAP值, 正类SHAP值]
+    shap_for_class = shap_values_sample[predicted_class][0]
+else:
+    # 数组格式，直接使用
+    shap_for_class = shap_values_sample[0]
+
+# 获取基准值
+if isinstance(explainer_shap.expected_value, list):
+    base_value = explainer_shap.expected_value[predicted_class]
+else:
+    base_value = explainer_shap.expected_value
+
+# 创建并显示force plot
+fig, ax = plt.subplots()
+shap.force_plot(
+    base_value,
+    shap_for_class,
+    sample_data.iloc[0],
+    matplotlib=True,
+    show=False,
+    figsize=(12, 4)
+)
     plt.savefig("shap_force_plot.png", bbox_inches='tight', dpi=1200)
     st.image("shap_force_plot.png", caption='SHAP Force Plot Explanation')
 
@@ -142,3 +161,4 @@ if st.button("Predict"):
     lime_html = lime_exp.as_html(show_table=False)  # Disable feature value table
 
     st.components.v1.html(lime_html, height=800, scrolling=True)
+
