@@ -102,63 +102,68 @@ if st.button("Predict"):
 # SHAP 解释
 st.subheader("SHAP Force Plot Explanation")
 
+# 创建 SHAP 解释器
+explainer_shap = shap.TreeExplainer(model)
+
+# 计算 SHAP 值
 try:
-    # 创建SHAP解释器
-    explainer = shap.TreeExplainer(model)
+    shap_values = explainer_shap(pd.DataFrame([feature_values], columns=feature_names))
     
-    # 准备数据
-    input_data = pd.DataFrame([feature_values], columns=feature_names)
-    
-    # 计算SHAP值
-    shap_values = explainer.shap_values(input_data)
-    
-    # 获取基线值（标量）
-    base_value = explainer.expected_value
-    
-    # 对于XGBoost二分类，SHAP值可能是：
-    # 1. 单个数组：表示对输出的贡献
-    # 2. 列表：[负类SHAP值, 正类SHAP值]
-    
-    # 确定使用哪个SHAP值
-    if isinstance(shap_values, list):
-        # 使用预测类别的SHAP值
-        shap_val = shap_values[predicted_class][0]  # [0]取第一个样本
+    # 确保 shap_values 是正确格式
+    if hasattr(shap_values, 'values'):
+        # 新的 SHAP 版本返回 Explanation 对象
+        shap_val = shap_values.values[0]
+        base_value = shap_values.base_values[0]
     else:
-        shap_val = shap_values[0]  # 取第一个样本
+        # 旧版本
+        if isinstance(shap_values, list):
+            shap_val = shap_values[predicted_class][0]
+            base_value = explainer_shap.expected_value[predicted_class]
+        else:
+            shap_val = shap_values[0]
+            base_value = explainer_shap.expected_value
     
-    # 创建图形
-    fig, ax = plt.subplots(figsize=(12, 3))
-    
-    # 绘制force plot
+    # 创建 force plot
+    fig, ax = plt.subplots(figsize=(10, 4))
     shap.force_plot(
         base_value,
         shap_val,
-        input_data.iloc[0],
+        pd.DataFrame([feature_values], columns=feature_names),
         matplotlib=True,
         show=False,
-        ax=ax
+        fig=fig
     )
     
     plt.tight_layout()
-    st.pyplot(fig)
+    plt.savefig("shap_force_plot.png", bbox_inches='tight', dpi=300)
+    st.image("shap_force_plot.png", caption='SHAP Force Plot Explanation')
     
 except Exception as e:
-    st.error(f"SHAP解释失败: {e}")
-    st.info("请检查SHAP值的数据结构")
+    st.error(f"SHAP plot generation failed: {str(e)}")
+    # 也可以考虑使用 waterfall plot 作为替代
+    try:
+        fig, ax = plt.subplots(figsize=(10, 6))
+        shap.plots.waterfall(shap_values[0], show=False)
+        plt.tight_layout()
+        plt.savefig("shap_waterfall.png", bbox_inches='tight', dpi=300)
+        st.image("shap_waterfall.png", caption='SHAP Waterfall Plot (替代)')
+    except:
+        st.warning("无法生成 SHAP 解释图")
+    # LIME Explanation
+    st.subheader("LIME Explanation")
+    lime_explainer = LimeTabularExplainer(
+        training_data=X_test.values,
+        feature_names=X_test.columns.tolist(),
+        class_names=['Not sick', 'Sick'],  # Adjust class names to match your classification task
+        mode='classification'
+    )
+    
+    # Explain the instance
+    lime_exp = lime_explainer.explain_instance(
+        data_row=features.flatten(),
+        predict_fn=model.predict_proba
+    )
 
-# LIME Explanation（保持不变）
-st.subheader("LIME Explanation")
-lime_explainer = LimeTabularExplainer(
-    training_data=X_test.values,
-    feature_names=X_test.columns.tolist(),
-    class_names=['Not sick', 'Sick'],
-    mode='classification'
-)
-
-lime_exp = lime_explainer.explain_instance(
-    data_row=features.flatten(),
-    predict_fn=model.predict_proba
-)
-
-lime_html = lime_exp.as_html(show_table=False)
-st.components.v1.html(lime_html, height=800, scrolling=True)
+    # Display the LIME explanation without the feature value table
+    lime_html = lime_exp.as_html(show_table=False)  # Disable feature value table
+    st.components.v1.html(lime_html, height=800, scrolling=True)
