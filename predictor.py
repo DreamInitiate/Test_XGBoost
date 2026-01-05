@@ -104,7 +104,28 @@ if st.button("Predict"):
     # 创建 SHAP 解释器，基于树模型（如随机森林）
     explainer_shap = shap.TreeExplainer(model)
     # 计算 SHAP 值，用于解释模型的预测
-    shap_values = explainer_shap.shap_values(pd.DataFrame([feature_values], columns=feature_names))
+    if predicted_class == 1:
+    try:
+        # 尝试获取第1个元素（如果存在）
+        if hasattr(explainer_shap.expected_value, '__len__'):
+            # 如果是数组/列表
+            exp_value = explainer_shap.expected_value[1] if len(explainer_shap.expected_value) > 1 else explainer_shap.expected_value[0]
+        else:
+            # 如果是标量
+            exp_value = explainer_shap.expected_value
+        
+        # 同样处理 shap_values
+        if isinstance(shap_values, list) and len(shap_values) > 1:
+            shap_val = shap_values[1]
+        else:
+            shap_val = shap_values
+            
+        shap.force_plot(exp_value, shap_val, input_data)
+        
+    except Exception as e:
+        print(f"绘制SHAP图时出错: {e}")
+        print(f"expected_value: {explainer_shap.expected_value}")
+        print(f"shap_values 类型: {type(shap_values)}")
     
     # 根据预测类别显示 SHAP 强制图
     # 期望值（基线值）
@@ -140,4 +161,5 @@ if st.button("Predict"):
 
     # Display the LIME explanation without the feature value table
     lime_html = lime_exp.as_html(show_table=False)  # Disable feature value table
+
     st.components.v1.html(lime_html, height=800, scrolling=True)
