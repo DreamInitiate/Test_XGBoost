@@ -99,32 +99,142 @@ if st.button("Predict"):
     # 显示建议
     st.write(advice)
 
-    # SHAP 解释
-    st.subheader("SHAP Force Plot Explanation")
+# SHAP 解释
+st.subheader("SHAP Force Plot Explanation")
+try:
     # 创建 SHAP 解释器，基于树模型（如随机森林）
     explainer_shap = shap.TreeExplainer(model)
-    # 计算 SHAP 值，用于解释模型的预测
-    shap_values = explainer_shap.shap_values(pd.DataFrame([feature_values], columns=feature_names))
     
-    # 根据预测类别显示 SHAP 强制图
-    # 期望值（基线值）
-    # 解释类别 1（患病）的 SHAP 值
-    # 特征值数据
-    # 使用 Matplotlib 绘图
-    if predicted_class == 1:
-        shap.force_plot(explainer_shap.expected_value[1], shap_values[:,:,1], pd.DataFrame([feature_values], columns=feature_names), matplotlib=True)
-    # 期望值（基线值）
-    # 解释类别 0（未患病）的 SHAP 值
-    # 特征值数据
-    # 使用 Matplotlib 绘图
+    # 准备输入数据
+    input_data = pd.DataFrame([feature_values], columns=feature_names)
+    
+    # 计算 SHAP 值，用于解释模型的预测
+    shap_values = explainer_shap.shap_values(input_data)
+    
+    # 调试信息（可选）
+    with st.expander("SHAP调试信息"):
+        st.write(f"Expected value: {explainer_shap.expected_value}")
+        st.write(f"Expected value类型: {type(explainer_shap.expected_value)}")
+        st.write(f"SHAP values类型: {type(shap_values)}")
+        if isinstance(shap_values, list):
+            st.write(f"SHAP值列表长度: {len(shap_values)}")
+            for i, val in enumerate(shap_values):
+                if hasattr(val, 'shape'):
+                    st.write(f"SHAP[{i}] 形状: {val.shape}")
+                else:
+                    st.write(f"SHAP[{i}]: {type(val)}")
+        elif hasattr(shap_values, 'shape'):
+            st.write(f"SHAP值形状: {shap_values.shape}")
+    
+    # XGBoost二分类模型的SHAP值处理
+    # 对于二分类XGBoost，shap_values通常是一个列表 [shape(1, n_features), shape(1, n_features)]
+    # expected_value通常是一个标量或长度为2的数组
+    
+    # 方法1：简化版本，不区分类别显示
+    st.subheader("SHAP Force Plot")
+    
+    # 创建图形
+    fig, ax = plt.subplots(figsize=(12, 3))
+    
+    # 处理expected_value
+    if isinstance(explainer_shap.expected_value, np.ndarray):
+        base_value = explainer_shap.expected_value[1]  # 正类的期望值
     else:
-        shap.force_plot(explainer_shap.expected_value[0], shap_values[:,:,0], pd.DataFrame([feature_values], columns=feature_names), matplotlib=True)
-
-    plt.savefig("shap_force_plot.png", bbox_inches='tight', dpi=1200)
+        base_value = explainer_shap.expected_value  # 标量期望值
+    
+    # 处理shap_values
+    if isinstance(shap_values, list):
+        # 对于二分类，通常有两个数组，取第二个（正类）
+        shap_val = shap_values[1] if len(shap_values) > 1 else shap_values[0]
+    else:
+        shap_val = shap_values
+    
+    # 确保是二维数组
+    if len(shap_val.shape) == 1:
+        shap_val = shap_val.reshape(1, -1)
+    
+    # 创建force plot
+    shap.force_plot(
+        base_value,
+        shap_val[0],  # 取第一个样本
+        input_data.iloc[0],  # 特征数据
+        matplotlib=True,
+        show=False,
+        ax=ax
+    )
+    
+    plt.tight_layout()
+    plt.savefig("shap_force_plot.png", bbox_inches='tight', dpi=300)
     st.image("shap_force_plot.png", caption='SHAP Force Plot Explanation')
+    
+    # 方法2：显示两个类别的SHAP值（可选）
+    st.subheader("SHAP Waterfall Plot")
+    fig2, ax2 = plt.subplots(figsize=(12, 6))
+    
+    try:
+        # 使用waterfall plot作为替代，通常更稳定
+        if isinstance(shap_values, list) and len(shap_values) > 1:
+            # 显示正类的SHAP值
+            shap_waterfall = shap_values[1][0]  # 正类，第一个样本
+            base_val = explainer_shap.expected_value[1] if isinstance(explainer_shap.expected_value, np.ndarray) else explainer_shap.expected_value
+        else:
+            shap_waterfall = shap_values[0] if isinstance(shap_values, list) else shap_values
+            base_val = explainer_shap.expected_value
+        
+        # 创建Explanation对象
+        exp = shap.Explanation(
+            values=shap_waterfall,
+            base_values=base_val,
+            data=input_data.iloc[0],
+            feature_names=feature_names
+        )
+        
+        # 绘制waterfall图
+        shap.waterfall_plot(exp, max_display=15, show=False)
+        plt.tight_layout()
+        st.pyplot(fig2)
+        
+    except Exception as e:
+        st.warning(f"Waterfall plot失败: {e}")
+        # 回退到summary plot
+        fig3, ax3 = plt.subplots(figsize=(12, 6))
+        shap.summary_plot(
+            shap_values if not isinstance(shap_values, list) else shap_values[1],
+            input_data,
+            feature_names=feature_names,
+            show=False,
+            plot_type="bar"
+        )
+        plt.tight_layout()
+        st.pyplot(fig3)
+        
+except Exception as e:
+    st.error(f"SHAP解释失败: {e}")
+    st.info("尝试其他可视化方法...")
+    
+    # 备用方案：显示特征重要性
+    st.subheader("特征重要性")
+    
+    # 获取特征重要性（如果模型支持）
+    if hasattr(model, 'feature_importances_'):
+        importances = model.feature_importances_
+        importance_df = pd.DataFrame({
+            '特征': feature_names,
+            '重要性': importances
+        }).sort_values('重要性', ascending=False)
+        
+        fig_imp, ax_imp = plt.subplots(figsize=(10, 6))
+        ax_imp.barh(range(len(importance_df)), importance_df['重要性'])
+        ax_imp.set_yticks(range(len(importance_df)))
+        ax_imp.set_yticklabels(importance_df['特征'])
+        ax_imp.set_xlabel('特征重要性')
+        ax_imp.set_title('模型特征重要性')
+        plt.tight_layout()
+        st.pyplot(fig_imp)
 
-    # LIME Explanation
-    st.subheader("LIME Explanation")
+# LIME Explanation
+st.subheader("LIME Explanation")
+try:
     lime_explainer = LimeTabularExplainer(
         training_data=X_test.values,
         feature_names=X_test.columns.tolist(),
@@ -140,6 +250,8 @@ if st.button("Predict"):
 
     # Display the LIME explanation without the feature value table
     lime_html = lime_exp.as_html(show_table=False)  # Disable feature value table
-
     st.components.v1.html(lime_html, height=800, scrolling=True)
-
+    
+except Exception as e:
+    st.error(f"LIME解释失败: {e}")
+    st.info("请确保已安装lime库：pip install lime")
