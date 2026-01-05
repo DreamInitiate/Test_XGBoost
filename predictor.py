@@ -101,27 +101,38 @@ if st.button("Predict"):
 
 # SHAP 解释
 st.subheader("SHAP Force Plot Explanation")
-# 创建 SHAP 解释器，基于树模型
-explainer_shap = shap.TreeExplainer(model)
 
-# 计算 SHAP 值，用于解释模型的预测
-X_sample = pd.DataFrame([feature_values], columns=feature_names)
-shap_values = explainer_shap.shap_values(X_sample)
-
-# 检查 shap_values 的数据结构并相应处理
 try:
+    # 创建 SHAP 解释器，基于树模型
+    explainer_shap = shap.TreeExplainer(model)
+    
+    # 计算 SHAP 值，用于解释模型的预测
+    X_sample = pd.DataFrame([feature_values], columns=feature_names)
+    shap_values = explainer_shap.shap_values(X_sample)
+    
+    # 处理不同的 shap_values 数据结构
     if isinstance(shap_values, list):
         # 对于多分类或二分类模型，shap_values 是一个列表
         if predicted_class == 1:
-            shap_value_for_plot = shap_values[1][0] if len(shap_values) > 1 else shap_values[0][0]
-            expected_value_for_plot = explainer_shap.expected_value[1] if hasattr(explainer_shap.expected_value, '__len__') else explainer_shap.expected_value
+            if len(shap_values) > 1:
+                shap_value_for_plot = shap_values[1]
+                expected_value_for_plot = explainer_shap.expected_value[1]
+            else:
+                shap_value_for_plot = shap_values[0]
+                expected_value_for_plot = explainer_shap.expected_value
         else:
-            shap_value_for_plot = shap_values[0][0] if len(shap_values) > 0 else shap_values[0]
+            shap_value_for_plot = shap_values[0]
             expected_value_for_plot = explainer_shap.expected_value[0] if hasattr(explainer_shap.expected_value, '__len__') else explainer_shap.expected_value
     else:
         # 对于回归或某些分类模型，shap_values 是一个数组
-        shap_value_for_plot = shap_values[0]
+        shap_value_for_plot = shap_values
         expected_value_for_plot = explainer_shap.expected_value
+    
+    # 确保 shap_value_for_plot 的维度正确
+    if len(shap_value_for_plot.shape) == 1:
+        shap_value_for_plot = shap_value_for_plot.reshape(1, -1)
+    elif len(shap_value_for_plot.shape) == 3:
+        shap_value_for_plot = shap_value_for_plot[0]
     
     # 使用 Matplotlib 绘图
     shap.force_plot(
@@ -134,7 +145,33 @@ try:
     
     plt.savefig("shap_force_plot.png", bbox_inches='tight', dpi=1200)
     plt.clf()  # 清理当前图形，避免重叠
+    
+    # 显示图像
     st.image("shap_force_plot.png", caption='SHAP Force Plot Explanation')
+
+except Exception as e:
+    # 如果出现错误，尝试备选方法
+    st.warning(f"使用标准SHAP方法时出错: {str(e)}，尝试备选方法...")
+    
+    try:
+        # 备选方法：使用 shap.Explanation 对象
+        explainer = shap.Explainer(model)
+        shap_values_alt = explainer(X_sample)
+        
+        if predicted_class == 1:
+            # 获取类别1的SHAP值
+            shap.plots.force(shap_values_alt[0, :, 1], matplotlib=True, show=False)
+        else:
+            # 获取类别0的SHAP值
+            shap.plots.force(shap_values_alt[0, :, 0], matplotlib=True, show=False)
+        
+        plt.savefig("shap_force_plot.png", bbox_inches='tight', dpi=1200)
+        plt.clf()
+        st.image("shap_force_plot.png", caption='SHAP Force Plot Explanation (Alternative Method)')
+        
+    except Exception as e2:
+        st.error(f"无法生成SHAP图：{str(e2)}")
+        st.info("请检查模型类型和SHAP版本兼容性。")
     
     # LIME Explanation
     st.subheader("LIME Explanation")
@@ -154,4 +191,5 @@ try:
     # Display the LIME explanation without the feature value table
     lime_html = lime_exp.as_html(show_table=False)  # Disable feature value table
     st.components.v1.html(lime_html, height=800, scrolling=True)
+
 
