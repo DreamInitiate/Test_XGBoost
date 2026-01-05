@@ -106,72 +106,50 @@ try:
     # 创建 SHAP 解释器，基于树模型
     explainer_shap = shap.TreeExplainer(model)
     
-    # 计算 SHAP 值，用于解释模型的预测
-    X_sample = pd.DataFrame([feature_values], columns=feature_names)
-    shap_values = explainer_shap.shap_values(X_sample)
+    # 计算 SHAP 值
+    shap_values = explainer_shap.shap_values(pd.DataFrame([feature_values], columns=feature_names))
     
-    # 处理不同的 shap_values 数据结构
-    if isinstance(shap_values, list):
-        # 对于多分类或二分类模型，shap_values 是一个列表
+    # 检查 shap_values 的维度
+    shap_values_array = np.array(shap_values)
+    
+    # 对于二分类 XGBoost，通常有两种情况：
+    # 1. 直接返回 (n_samples, n_features) 形状的数组
+    # 2. 返回包含两个数组的列表 [negative_class_shap, positive_class_shap]
+    
+    if isinstance(shap_values, list) and len(shap_values) == 2:
+        # 如果是列表形式（两个类别）
         if predicted_class == 1:
-            if len(shap_values) > 1:
-                shap_value_for_plot = shap_values[1]
-                expected_value_for_plot = explainer_shap.expected_value[1]
-            else:
-                shap_value_for_plot = shap_values[0]
-                expected_value_for_plot = explainer_shap.expected_value
+            shap_vals = shap_values[1]  # 正类
+            expected_val = explainer_shap.expected_value[1] if hasattr(explainer_shap.expected_value, '__len__') else explainer_shap.expected_value
         else:
-            shap_value_for_plot = shap_values[0]
-            expected_value_for_plot = explainer_shap.expected_value[0] if hasattr(explainer_shap.expected_value, '__len__') else explainer_shap.expected_value
+            shap_vals = shap_values[0]  # 负类
+            expected_val = explainer_shap.expected_value[0] if hasattr(explainer_shap.expected_value, '__len__') else explainer_shap.expected_value
     else:
-        # 对于回归或某些分类模型，shap_values 是一个数组
-        shap_value_for_plot = shap_values
-        expected_value_for_plot = explainer_shap.expected_value
+        # 如果是数组形式
+        shap_vals = shap_values
+        expected_val = explainer_shap.expected_value
+        # 如果 expected_value 是数组，取对应的值
+        if hasattr(expected_val, '__len__') and len(expected_val) > 1:
+            expected_val = expected_val[1] if predicted_class == 1 else expected_val[0]
     
-    # 确保 shap_value_for_plot 的维度正确
-    if len(shap_value_for_plot.shape) == 1:
-        shap_value_for_plot = shap_value_for_plot.reshape(1, -1)
-    elif len(shap_value_for_plot.shape) == 3:
-        shap_value_for_plot = shap_value_for_plot[0]
+    # 确保 shap_vals 是二维的
+    if len(shap_vals.shape) == 1:
+        shap_vals = shap_vals.reshape(1, -1)
+    elif len(shap_vals.shape) == 3:
+        # 如果是三维数组，根据预测类别选择
+        shap_vals = shap_vals[0, :, predicted_class] if predicted_class == 1 else shap_vals[0, :, 0]
+        shap_vals = shap_vals.reshape(1, -1)
     
-    # 使用 Matplotlib 绘图
+    # 创建力力图
+    fig, ax = plt.subplots()
     shap.force_plot(
-        expected_value_for_plot,
-        shap_value_for_plot,
-        X_sample,
+        expected_val,
+        shap_vals,
+        pd.DataFrame([feature_values], columns=feature_names),
         matplotlib=True,
-        show=False
+        show=False,
+        figsize=(12, 4)
     )
-    
-    plt.savefig("shap_force_plot.png", bbox_inches='tight', dpi=1200)
-    plt.clf()  # 清理当前图形，避免重叠
-    
-    # 显示图像
-    st.image("shap_force_plot.png", caption='SHAP Force Plot Explanation')
-
-except Exception as e:
-    # 如果出现错误，尝试备选方法
-    st.warning(f"使用标准SHAP方法时出错: {str(e)}，尝试备选方法...")
-    
-    try:
-        # 备选方法：使用 shap.Explanation 对象
-        explainer = shap.Explainer(model)
-        shap_values_alt = explainer(X_sample)
-        
-        if predicted_class == 1:
-            # 获取类别1的SHAP值
-            shap.plots.force(shap_values_alt[0, :, 1], matplotlib=True, show=False)
-        else:
-            # 获取类别0的SHAP值
-            shap.plots.force(shap_values_alt[0, :, 0], matplotlib=True, show=False)
-        
-        plt.savefig("shap_force_plot.png", bbox_inches='tight', dpi=1200)
-        plt.clf()
-        st.image("shap_force_plot.png", caption='SHAP Force Plot Explanation (Alternative Method)')
-        
-    except Exception as e2:
-        st.error(f"无法生成SHAP图：{str(e2)}")
-        st.info("请检查模型类型和SHAP版本兼容性。")
     
     # LIME Explanation
     st.subheader("LIME Explanation")
@@ -191,5 +169,6 @@ except Exception as e:
     # Display the LIME explanation without the feature value table
     lime_html = lime_exp.as_html(show_table=False)  # Disable feature value table
     st.components.v1.html(lime_html, height=800, scrolling=True)
+
 
 
