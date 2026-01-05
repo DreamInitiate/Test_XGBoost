@@ -101,54 +101,41 @@ if st.button("Predict"):
 
 # SHAP 解释
 st.subheader("SHAP Force Plot Explanation")
-
-# 创建 SHAP 解释器
+# 创建 SHAP 解释器，基于树模型
 explainer_shap = shap.TreeExplainer(model)
 
-# 计算 SHAP 值
+# 计算 SHAP 值，用于解释模型的预测
+X_sample = pd.DataFrame([feature_values], columns=feature_names)
+shap_values = explainer_shap.shap_values(X_sample)
+
+# 检查 shap_values 的数据结构并相应处理
 try:
-    shap_values = explainer_shap(pd.DataFrame([feature_values], columns=feature_names))
-    
-    # 确保 shap_values 是正确格式
-    if hasattr(shap_values, 'values'):
-        # 新的 SHAP 版本返回 Explanation 对象
-        shap_val = shap_values.values[0]
-        base_value = shap_values.base_values[0]
-    else:
-        # 旧版本
-        if isinstance(shap_values, list):
-            shap_val = shap_values[predicted_class][0]
-            base_value = explainer_shap.expected_value[predicted_class]
+    if isinstance(shap_values, list):
+        # 对于多分类或二分类模型，shap_values 是一个列表
+        if predicted_class == 1:
+            shap_value_for_plot = shap_values[1][0] if len(shap_values) > 1 else shap_values[0][0]
+            expected_value_for_plot = explainer_shap.expected_value[1] if hasattr(explainer_shap.expected_value, '__len__') else explainer_shap.expected_value
         else:
-            shap_val = shap_values[0]
-            base_value = explainer_shap.expected_value
+            shap_value_for_plot = shap_values[0][0] if len(shap_values) > 0 else shap_values[0]
+            expected_value_for_plot = explainer_shap.expected_value[0] if hasattr(explainer_shap.expected_value, '__len__') else explainer_shap.expected_value
+    else:
+        # 对于回归或某些分类模型，shap_values 是一个数组
+        shap_value_for_plot = shap_values[0]
+        expected_value_for_plot = explainer_shap.expected_value
     
-    # 创建 force plot
-    fig, ax = plt.subplots(figsize=(10, 4))
+    # 使用 Matplotlib 绘图
     shap.force_plot(
-        base_value,
-        shap_val,
-        pd.DataFrame([feature_values], columns=feature_names),
+        expected_value_for_plot,
+        shap_value_for_plot,
+        X_sample,
         matplotlib=True,
-        show=False,
-        fig=fig
+        show=False
     )
     
-    plt.tight_layout()
-    plt.savefig("shap_force_plot.png", bbox_inches='tight', dpi=300)
+    plt.savefig("shap_force_plot.png", bbox_inches='tight', dpi=1200)
+    plt.clf()  # 清理当前图形，避免重叠
     st.image("shap_force_plot.png", caption='SHAP Force Plot Explanation')
     
-except Exception as e:
-    st.error(f"SHAP plot generation failed: {str(e)}")
-    # 也可以考虑使用 waterfall plot 作为替代
-    try:
-        fig, ax = plt.subplots(figsize=(10, 6))
-        shap.plots.waterfall(shap_values[0], show=False)
-        plt.tight_layout()
-        plt.savefig("shap_waterfall.png", bbox_inches='tight', dpi=300)
-        st.image("shap_waterfall.png", caption='SHAP Waterfall Plot (替代)')
-    except:
-        st.warning("无法生成 SHAP 解释图")
     # LIME Explanation
     st.subheader("LIME Explanation")
     lime_explainer = LimeTabularExplainer(
@@ -167,3 +154,4 @@ except Exception as e:
     # Display the LIME explanation without the feature value table
     lime_html = lime_exp.as_html(show_table=False)  # Disable feature value table
     st.components.v1.html(lime_html, height=800, scrolling=True)
+
