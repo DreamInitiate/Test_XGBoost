@@ -139,8 +139,9 @@ shap.force_plot(
     show=False,
     figsize=(12, 4)
 )
-    plt.savefig("shap_force_plot.png", bbox_inches='tight', dpi=1200)
-    st.image("shap_force_plot.png", caption='SHAP Force Plot Explanation')
+plt.tight_layout()
+plt.savefig("shap_force_plot.png", bbox_inches='tight', dpi=300)
+st.image("shap_force_plot.png", caption='SHAP Force Plot Explanation')
 
     # LIME Explanation
     st.subheader("LIME Explanation")
@@ -161,4 +162,5 @@ shap.force_plot(
     lime_html = lime_exp.as_html(show_table=False)  # Disable feature value table
 
     st.components.v1.html(lime_html, height=800, scrolling=True)
+
 
