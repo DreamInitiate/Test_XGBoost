@@ -20,7 +20,7 @@ import matplotlib.pyplot as plt
 from lime.lime_tabular import LimeTabularExplainer  
 
 # 加载训练好的模型（.pkl）
-model = joblib.load('random_forest_model.pkl')  
+model = joblib.load('xgb_model.pkl')  
 
 # 从 X_test.csv 文件加载测试数据，以便用于 LIME 解释器
 X_test = pd.read_excel('data.xlsx')  
@@ -140,4 +140,5 @@ if st.button("Predict"):
 
     # Display the LIME explanation without the feature value table
     lime_html = lime_exp.as_html(show_table=False)  # Disable feature value table
+
     st.components.v1.html(lime_html, height=800, scrolling=True)
