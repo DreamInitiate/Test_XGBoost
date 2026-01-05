@@ -1,104 +1,122 @@
-import streamlit as st
-import joblib
-import numpy as np
-import pandas as pd
-import shap
-import matplotlib.pyplot as plt
-from lime.lime_tabular import LimeTabularExplainer
+# 导入 Streamlit 库，用于构建 Web 应用
+import streamlit as st  
 
-# Load the new model
-model = joblib.load('RF.pkl')
+# 导入 joblib 库，用于加载和保存机器学习模型
+import joblib  
 
-# Load the test data from X_test.csv to create LIME explainer
-X_test = pd.read_csv('X_test.csv')
+# 导入 NumPy 库，用于数值计算
+import numpy as np  
 
-# Define feature names from the new dataset
-feature_names = [
-    "age", "sex", "cp", "trestbps", "chol", "fbs", "restecg", 
-    "thalach", "exang", "oldpeak", "slope", "ca", "thal"
-]
+# 导入 Pandas 库，用于数据处理和操作
+import pandas as pd  
 
-# Streamlit user interface
-st.title("Heart Disease Predictor")
+# 导入 SHAP 库，用于解释机器学习模型的预测
+import shap  
 
-# Age: numerical input
-age = st.number_input("Age:", min_value=0, max_value=120, value=41)
+# 导入 Matplotlib 库，用于数据可视化
+import matplotlib.pyplot as plt  
 
-# Sex: categorical selection
-sex = st.selectbox("Sex:", options=[0, 1], format_func=lambda x: "Male" if x == 1 else "Female")
+# 从 LIME 库中导入 LimeTabularExplainer，用于解释表格数据的机器学习模型
+from lime.lime_tabular import LimeTabularExplainer  
 
-# Chest Pain Type (cp): categorical selection
-cp = st.selectbox("Chest Pain Type (CP):", options=[0, 1, 2, 3])
+# 加载训练好的模型（.pkl）
+model = joblib.load('xgb_model.pkl')  
 
-# Resting Blood Pressure (trestbps): numerical input
-trestbps = st.number_input("Resting Blood Pressure (trestbps):", min_value=50, max_value=200, value=120)
+# 从 X_test.csv 文件加载测试数据，以便用于 LIME 解释器
+X_test = pd.read_excel('data.xlsx')  
 
-# Cholesterol (chol): numerical input
-chol = st.number_input("Cholesterol (chol):", min_value=100, max_value=600, value=157)
+# 定义特征名称，对应数据集中的列名
+feature_names = [  
+    "Age",       # 年龄  
+    "CE",       # 脑水肿  
+    "HT",        # 出血转化  
+    "SAP",  # 卒中相关性肺炎  
+    "END",      # 早期神经功能恶化
+    "Current_Smoking",   # 是否吸烟  
+    "NIHSS0",       # 基线NIHSS评分  
+    "Operation_time",   # 手术时长      
+]  
 
-# Fasting Blood Sugar > 120 mg/dl (fbs): categorical selection
-fbs = st.selectbox("Fasting Blood Sugar > 120 mg/dl (FBS):", options=[0, 1], format_func=lambda x: "Yes" if x == 1 else "No")
+# Streamlit 用户界面
+st.title("90天预后预测工具")  # 设置网页标题
 
-# Resting Electrocardiographic Results (restecg): categorical selection
-restecg = st.selectbox("Resting ECG (restecg):", options=[0, 1, 2])
+# 年龄（Age）：数值输入框
+Age = st.number_input("年龄:", min_value=0, max_value=120, value=0)  
 
-# Maximum Heart Rate Achieved (thalach): numerical input
-thalach = st.number_input("Maximum Heart Rate Achieved (thalach):", min_value=60, max_value=220, value=182)
+# 脑水肿（CE）：分类选择框（0：否，1：是）
+CE = st.selectbox("脑水肿:", options=[0, 1], format_func=lambda x: "否" if x == 1 else "是")  
 
-# Exercise Induced Angina (exang): categorical selection
-exang = st.selectbox("Exercise Induced Angina (exang):", options=[0, 1], format_func=lambda x: "Yes" if x == 1 else "No")
+# 出血转化（HT）：分类选择框（0：否，1：是）
+HT = st.selectbox("出血转化:", options=[0, 1], format_func=lambda x: "否" if x == 1 else "是")  
 
-# ST Depression Induced by Exercise (oldpeak): numerical input
-oldpeak = st.number_input("ST Depression Induced by Exercise (oldpeak):", min_value=0.0, max_value=10.0, value=1.0)
+# 卒中相关性肺炎（SAP）：分类选择框（0：否，1：是）
+SAP = st.selectbox("卒中相关性肺炎:", options=[0, 1], format_func=lambda x: "否" if x == 1 else "是")  
 
-# Slope of the Peak Exercise ST Segment (slope): categorical selection
-slope = st.selectbox("Slope of the Peak Exercise ST Segment (slope):", options=[0, 1, 2])
+# 早期神经功能恶化（END）：分类选择框（0：否，1：是）
+END = st.selectbox("早期神经功能恶化:", options=[0, 1], format_func=lambda x: "否" if x == 1 else "是")  
 
-# Number of Major Vessels Colored by Fluoroscopy (ca): categorical selection
-ca = st.selectbox("Number of Major Vessels Colored by Fluoroscopy (ca):", options=[0, 1, 2, 3, 4])
+# 是否吸烟（Current_Smoking）：分类选择框（0：否，1：是）
+Current_Smoking = st.selectbox("是否吸烟:", options=[0, 1], format_func=lambda x: "否" if x == 1 else "是")  
 
-# Thalassemia (thal): categorical selection
-thal = st.selectbox("Thalassemia (thal):", options=[0, 1, 2, 3])
+# 基线NIHSS评分（NIHSS0）：数值输入框
+NIHSS0 = st.number_input("基线NIHSS评分:", min_value=0, max_value=42, value=0)  
 
-# Process inputs and make predictions
-feature_values = [age, sex, cp, trestbps, chol, fbs, restecg, thalach, exang, oldpeak, slope, ca, thal]
-features = np.array([feature_values])
+# 手术时长（Operation_time）：数值输入框
+Operation_time = st.number_input("手术时长（分钟数）:", min_value=0, max_value=1000, value=0) 
+ 
 
+# 处理输入数据并进行预测
+feature_values = [Age, CE, HT, SAP, END, Current_Smoking, NIHSS0, Operation_time]  # 将用户输入的特征值存入列表
+features = np.array([feature_values])  # 将特征转换为 NumPy 数组，适用于模型输入
+
+# 当用户点击 "Predict" 按钮时执行以下代码
 if st.button("Predict"):
-    # Predict class and probabilities
+     # 预测类别（0：预后良好，1：预后不良）
     predicted_class = model.predict(features)[0]
+    # 预测类别的概率
     predicted_proba = model.predict_proba(features)[0]
 
-    # Display prediction results
+     # 显示预测结果
     st.write(f"**Predicted Class:** {predicted_class} (1: Disease, 0: No Disease)")
     st.write(f"**Prediction Probabilities:** {predicted_proba}")
 
-    # Generate advice based on prediction results
+    # 根据预测结果生成建议
     probability = predicted_proba[predicted_class] * 100
-
+    # 如果预测类别为 1（高风险）
     if predicted_class == 1:
         advice = (
-            f"According to our model, you have a high risk of heart disease. "
-            f"The model predicts that your probability of having heart disease is {probability:.1f}%. "
+            f"According to our model, you have a high risk of poor prognosis. "
+            f"The model predicts that your probability of having a poor outcome within 90 days is {probability:.1f}%. "
             "It's advised to consult with your healthcare provider for further evaluation and possible intervention."
         )
+    # 如果预测类别为 0（低风险）
     else:
         advice = (
-            f"According to our model, you have a low risk of heart disease. "
-            f"The model predicts that your probability of not having heart disease is {probability:.1f}%. "
+            f"According to our model, you have a low risk of favorable prognosis. "
+            f"The model predicts that your probability of having a favorable outcome within 90 days is {probability:.1f}%. "
             "However, maintaining a healthy lifestyle is important. Please continue regular check-ups with your healthcare provider."
         )
-
+    # 显示建议
     st.write(advice)
 
-    # SHAP Explanation
+    # SHAP 解释
     st.subheader("SHAP Force Plot Explanation")
+    # 创建 SHAP 解释器，基于树模型（如随机森林）
     explainer_shap = shap.TreeExplainer(model)
+    # 计算 SHAP 值，用于解释模型的预测
     shap_values = explainer_shap.shap_values(pd.DataFrame([feature_values], columns=feature_names))
     
-    # Display the SHAP force plot for the predicted class
+    # 根据预测类别显示 SHAP 强制图
+    # 期望值（基线值）
+    # 解释类别 1（患病）的 SHAP 值
+    # 特征值数据
+    # 使用 Matplotlib 绘图
     if predicted_class == 1:
         shap.force_plot(explainer_shap.expected_value[1], shap_values[:,:,1], pd.DataFrame([feature_values], columns=feature_names), matplotlib=True)
+    # 期望值（基线值）
+    # 解释类别 0（未患病）的 SHAP 值
+    # 特征值数据
+    # 使用 Matplotlib 绘图
     else:
         shap.force_plot(explainer_shap.expected_value[0], shap_values[:,:,0], pd.DataFrame([feature_values], columns=feature_names), matplotlib=True)
 
